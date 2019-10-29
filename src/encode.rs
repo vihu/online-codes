@@ -5,12 +5,14 @@ use crate::decode::Decoder;
 use crate::util::{sample_with_exclusive_repeats, xor_block, seed_block_rng, get_adjacent_blocks};
 use crate::types::{StreamId, BlockIndex, CheckBlockId};
 
+#[derive(Debug)]
 pub struct OnlineCoder {
     block_size: usize,
     epsilon: f64,
     q: usize,
 }
 
+#[derive(Debug)]
 pub struct BlockIter<'a> {
     pub data: &'a [u8],
     pub aux_data: Vec<u8>,
@@ -120,8 +122,8 @@ impl OnlineCoder {
 }
 
 impl<'a> Iterator for BlockIter<'a> {
-    type Item = Vec<u8>;
-    fn next(&mut self) -> Option<Vec<u8>> {
+    type Item = (CheckBlockId, Vec<u8>);
+    fn next(&mut self) -> Option<(CheckBlockId, Vec<u8>)> {
         let num_blocks = self.data.len() / self.block_size;
         let num_aux_blocks = self.aux_data.len() / self.block_size;
         let mut check_block = vec![0; self.block_size];
@@ -149,7 +151,7 @@ impl<'a> Iterator for BlockIter<'a> {
         }
 
         self.check_block_id += 1;
-        Some(check_block)
+        Some((self.check_block_id - 1, check_block))
     }
 }
 

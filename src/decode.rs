@@ -1,11 +1,12 @@
-use std::collections::{hash_map::Entry, HashMap};
-use rand::distributions::WeightedIndex;
-use crate::types::{StreamId, BlockIndex, CheckBlockId};
+use crate::types::{BlockIndex, CheckBlockId, StreamId};
 use crate::util::{get_adjacent_blocks, xor_block};
+use rand::distributions::WeightedIndex;
+use std::collections::{hash_map::Entry, HashMap};
 
-pub enum DecodeResult<'a> {
+#[derive(Debug)]
+pub enum DecodeResult {
     Complete(Vec<u8>),
-    InProgress(Decoder<'a>),
+    InProgress(Decoder),
 }
 
 enum UndecodedDegree {
@@ -14,7 +15,8 @@ enum UndecodedDegree {
     Many(usize),     // number of blocks that haven't yet been decoded
 }
 
-pub struct Decoder<'a> {
+#[derive(Debug)]
+pub struct Decoder {
     pub num_blocks: usize,
     pub num_augmented_blocks: usize,
     pub block_size: usize,
@@ -25,13 +27,13 @@ pub struct Decoder<'a> {
     pub augmented_data: Vec<u8>,
     pub blocks_decoded: Vec<bool>,
     pub num_undecoded_data_blocks: usize,
-    pub unused_check_blocks: HashMap<CheckBlockId, (usize, &'a [u8])>,
+    pub unused_check_blocks: HashMap<CheckBlockId, (usize, Vec<u8>)>,
     pub adjacent_check_blocks: HashMap<BlockIndex, Vec<CheckBlockId>>,
-    pub decode_stack: Vec<(CheckBlockId, &'a [u8])>,
+    pub decode_stack: Vec<(CheckBlockId, Vec<u8>)>,
     pub aux_decode_stack: Vec<(BlockIndex, Vec<BlockIndex>)>,
 }
 
-impl<'a> DecodeResult<'a> {
+impl DecodeResult {
     pub fn complete(self) -> Option<Vec<u8>> {
         match self {
             DecodeResult::Complete(v) => Some(v),
@@ -40,11 +42,11 @@ impl<'a> DecodeResult<'a> {
     }
 }
 
-impl<'a> Decoder<'a> {
+impl<'a> Decoder {
     pub fn decode_block(
         &mut self,
         check_block_id: CheckBlockId,
-        check_block: &'a [u8],
+        check_block: &[u8],
     ) -> Option<Vec<u8>> {
         if self.num_undecoded_data_blocks == 0 {
             // Decoding has already finished and the decoded data has already been returned.
@@ -52,7 +54,8 @@ impl<'a> Decoder<'a> {
         }
 
         // TODO: don't immediately push then pop off the decode stack
-        self.decode_stack.push((check_block_id, check_block));
+        self.decode_stack
+            .push((check_block_id, check_block.to_owned()));
 
         while let Some((check_block_id, check_block)) = self.decode_stack.pop() {
             let adjacent_blocks = get_adjacent_blocks(
@@ -66,7 +69,7 @@ impl<'a> Decoder<'a> {
                 UndecodedDegree::One(target_block_index) => {
                     decode_from_check_block(
                         target_block_index,
-                        check_block,
+                        &check_block,
                         &adjacent_blocks,
                         &mut self.augmented_data,
                         self.block_size,
@@ -99,8 +102,10 @@ impl<'a> Decoder<'a> {
                                 let remaining_degree = &mut unused_block_entry.get_mut().0;
                                 *remaining_degree -= 1;
                                 if *remaining_degree == 1 {
-                                    self.decode_stack
-                                        .push((check_block_id, unused_block_entry.remove().1));
+                                    self.decode_stack.push((
+                                        check_block_id,
+                                        unused_block_entry.remove().1.to_owned(),
+                                    ));
                                 }
                             }
                         }
@@ -108,7 +113,7 @@ impl<'a> Decoder<'a> {
                 }
                 UndecodedDegree::Many(degree) => {
                     self.unused_check_blocks
-                        .insert(check_block_id, (degree, check_block));
+                        .insert(check_block_id, (degree, check_block.to_owned()));
                     for block_index in adjacent_blocks {
                         self.adjacent_check_blocks
                             .entry(block_index)
@@ -136,14 +141,14 @@ impl<'a> Decoder<'a> {
             // Decoding finished -- return decoded data.
             let mut decoded_data = std::mem::replace(&mut self.augmented_data, Vec::new());
             decoded_data.truncate(self.block_size * self.num_blocks);
-            return Some(decoded_data);
+            Some(decoded_data)
         } else {
             // Decoding not yet complete.
-            return None;
+            None
         }
     }
 
-    pub fn from_iter<T>(mut self, iter: T) -> DecodeResult<'a>
+    pub fn from_iter<T>(mut self, iter: T) -> DecodeResult
     where
         T: IntoIterator<Item = (CheckBlockId, &'a [u8])>,
     {
@@ -152,7 +157,7 @@ impl<'a> Decoder<'a> {
                 return DecodeResult::Complete(decoded_data);
             }
         }
-        return DecodeResult::InProgress(self);
+        DecodeResult::InProgress(self)
     }
 
     pub fn get_incomplete_result(&self) -> (&[bool], &[u8]) {
@@ -241,7 +246,7 @@ fn undecoded_degree(adjacent_block_ids: &[BlockIndex], blocks_decoded: &[bool]) 
         }
     }
 
-    return degree;
+    degree
 }
 
 fn block_to_decode(adjacent_blocks: &[BlockIndex], block_decoded: &[bool]) -> Option<BlockIndex> {
@@ -256,6 +261,5 @@ fn block_to_decode(adjacent_blocks: &[BlockIndex], block_decoded: &[bool]) -> Op
         }
     }
 
-    return to_decode;
+    to_decode
 }
-
