@@ -4,6 +4,7 @@ use crate::util::{
     xor_block,
 };
 use rand::distributions::WeightedIndex;
+use serde::{Deserialize, Serialize};
 use std::collections::{hash_map::Entry, HashMap};
 
 #[derive(Debug)]
@@ -18,7 +19,7 @@ enum UndecodedDegree {
     Many(usize),     // number of blocks that haven't yet been decoded
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Decoder {
     pub num_blocks: usize,
     pub num_augmented_blocks: usize,
