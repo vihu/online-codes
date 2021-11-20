@@ -28,7 +28,6 @@ pub fn new_encoder(mut buf: Vec<u8>, block_size: usize, stream_id: StreamId) -> 
     let rem = len % block_size;
     let pad: i64 = block_size as i64 - rem as i64;
     buf.resize_with(len + pad.abs() as usize, || 0);
-
     let coder = encode::OnlineCoder::new(block_size);
     let block_iter = coder.encode(buf, stream_id);
     Encoder { block_iter }
