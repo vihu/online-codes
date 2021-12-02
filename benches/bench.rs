@@ -2,10 +2,12 @@ use criterion::BenchmarkId;
 use criterion::Criterion;
 use criterion::Throughput;
 use criterion::{criterion_group, criterion_main};
-use online_codes::{decode_block, encode_data, next_block};
+use online_codes::{decode_block, new_decoder, new_encoder, next_block};
 
 fn check_encode_decode(buf: Vec<u8>) -> Option<Vec<u8>> {
-    let (mut encoder, mut decoder) = encode_data(buf);
+    let buf_len = buf.len();
+    let mut encoder = new_encoder(buf, 4, 0);
+    let mut decoder = new_decoder(buf_len, 4, 0);
 
     loop {
         match next_block(&mut encoder) {
