@@ -85,11 +85,6 @@ impl<'a> Decoder {
         check_block_id: CheckBlockId,
         check_block: &[u8],
     ) -> Option<Vec<u8>> {
-        if self.num_undecoded_data_blocks == 0 {
-            // Decoding has already finished and the decoded data has already been returned.
-            return None;
-        }
-
         // TODO: don't immediately push then pop off the decode stack
         self.decode_stack
             .push((check_block_id, check_block.to_owned()));
@@ -176,7 +171,7 @@ impl<'a> Decoder {
 
         if self.num_undecoded_data_blocks == 0 {
             // Decoding finished -- return decoded data.
-            let mut decoded_data = std::mem::take(&mut self.augmented_data);
+            let mut decoded_data = self.augmented_data.clone();
             decoded_data.truncate(self.block_size * self.num_blocks);
             Some(decoded_data)
         } else {
