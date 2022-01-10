@@ -12,7 +12,7 @@ proptest! {
         // Generate some data
         // NOTE: We will not mangle it here, separate test for that
         // We'll just see if we can encode <=> decode
-        let buf = s.clone().into_bytes();
+        let buf = s.into_bytes();
         let buf_len = buf.len();
         // Not ideal but okay for now to make things work
         if buf_len > 4 {
@@ -34,13 +34,13 @@ proptest! {
     #![proptest_config(ProptestConfig::with_cases(10000))]
     #[test]
     fn test_with_known_loss(s in ".*") {
-        let buf = s.clone().into_bytes();
+        let buf = s.into_bytes();
         let buf_len = buf.len();
         if buf_len > 4 {
             let block_size = buf_len/4;
             if buf_len % block_size == 0 {
-                for loss in vec![0.1, 0.3, 0.5, 0.9] {
-                    if let Some((decoded, loss_counter, total_counter)) = check_encode_decode_with_loss(buf.clone(), loss) {
+                for loss in &[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9] {
+                    if let Some((decoded, loss_counter, total_counter)) = check_encode_decode_with_loss(buf.clone(), *loss) {
                         // NOTE: I'm pretty sure the higher the loss, the higher the returned block_id
                         // (our counter) would be. Looking at the output below sort of justifies
                         // that as well, but we probably should have more thorough checks.
@@ -57,10 +57,10 @@ proptest! {
 }
 
 fn check_encode_decode(buf: Vec<u8>) -> Option<Vec<u8>> {
-    println!("buffer: {:?}", buf);
+    println!("\nlen: {:?}, buffer: {:?}", buf.len(), buf);
 
     let buf_len = buf.len();
-    let mut encoder = new_encoder(buf.clone(), 3, 0);
+    let mut encoder = new_encoder(buf, 3, 0);
     let mut decoder = new_decoder(buf_len, 3, 0);
 
     // TODO: Should we put a limit or loop infinitely?
@@ -84,9 +84,9 @@ fn check_encode_decode_with_loss(buf: Vec<u8>, loss: f64) -> Option<(Vec<u8>, St
     let mut total_counter = 0;
     let mut loss_counter = 0;
 
-    println!("buffer: {:?}", buf);
+    println!("\nlen: {:?}, buffer: {:?}", buf.len(), buf);
     let buf_len = buf.len();
-    let mut encoder = new_encoder(buf.clone(), 4, 0);
+    let mut encoder = new_encoder(buf, 4, 0);
     let mut decoder = new_decoder(buf_len, 4, 0);
 
     // TODO: Should we put a limit or loop infinitely?

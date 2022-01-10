@@ -198,7 +198,7 @@ impl<'a> Decoder {
                 &self.degree_distribution,
                 self.num_augmented_blocks,
             );
-            match undecoded_degree(&adjacent_blocks, &self.blocks_decoded) {
+            match self.undecoded_degree(&adjacent_blocks) {
                 UndecodedDegree::Zero => (), // nothing to do here
                 UndecodedDegree::One(target_block_index) => {
                     self.handle_degree_one(target_block_index, &check_block, adjacent_blocks)
@@ -244,49 +244,50 @@ impl<'a> Decoder {
         index: BlockIndex,
         adjacent_blocks: &[BlockIndex],
     ) -> Option<BlockIndex> {
-        block_to_decode(adjacent_blocks, &self.blocks_decoded).map(|target_block_index| {
-            for i in 0..self.block_size {
-                self.augmented_data[target_block_index * self.block_size + i] ^=
-                    self.augmented_data[index * self.block_size + i];
-            }
-            xor_adjacent_blocks(
-                target_block_index,
-                adjacent_blocks,
-                &mut self.augmented_data,
-                self.block_size,
-            );
-            target_block_index
-        })
+        self.block_to_decode(adjacent_blocks)
+            .map(|target_block_index| {
+                for i in 0..self.block_size {
+                    self.augmented_data[target_block_index * self.block_size + i] ^=
+                        self.augmented_data[index * self.block_size + i];
+                }
+                xor_adjacent_blocks(
+                    target_block_index,
+                    adjacent_blocks,
+                    &mut self.augmented_data,
+                    self.block_size,
+                );
+                target_block_index
+            })
     }
-}
 
-fn undecoded_degree(adjacent_block_ids: &[BlockIndex], blocks_decoded: &[bool]) -> UndecodedDegree {
-    // If exactly one of the adjacent blocks is not yet decoded, return the id of that block.
-    let mut degree = UndecodedDegree::Zero;
-    for block_index in adjacent_block_ids {
-        if !blocks_decoded[*block_index] {
-            degree = match degree {
-                UndecodedDegree::Zero => UndecodedDegree::One(*block_index),
-                UndecodedDegree::One(_) => UndecodedDegree::Many(2),
-                UndecodedDegree::Many(n) => UndecodedDegree::Many(n + 1),
+    fn undecoded_degree(&self, adjacent_block_ids: &[BlockIndex]) -> UndecodedDegree {
+        // If exactly one of the adjacent blocks is not yet decoded, return the id of that block.
+        let mut degree = UndecodedDegree::Zero;
+        for block_index in adjacent_block_ids {
+            if !self.blocks_decoded[*block_index] {
+                degree = match degree {
+                    UndecodedDegree::Zero => UndecodedDegree::One(*block_index),
+                    UndecodedDegree::One(n) => UndecodedDegree::Many(n),
+                    UndecodedDegree::Many(n) => UndecodedDegree::Many(n + 1),
+                }
             }
         }
+
+        degree
     }
 
-    degree
-}
-
-fn block_to_decode(adjacent_blocks: &[BlockIndex], block_decoded: &[bool]) -> Option<BlockIndex> {
-    // If exactly one of the adjacent blocks is not yet decoded, return the id of that block.
-    let mut to_decode = None;
-    for block_index in adjacent_blocks {
-        if !block_decoded[*block_index] {
-            if to_decode.is_some() {
-                return None;
+    fn block_to_decode(&self, adjacent_blocks: &[BlockIndex]) -> Option<BlockIndex> {
+        // If exactly one of the adjacent blocks is not yet decoded, return the id of that block.
+        let mut to_decode = None;
+        for block_index in adjacent_blocks {
+            if !self.blocks_decoded[*block_index] {
+                if to_decode.is_some() {
+                    return None;
+                }
+                to_decode = Some(*block_index)
             }
-            to_decode = Some(*block_index)
         }
-    }
 
-    to_decode
+        to_decode
+    }
 }
