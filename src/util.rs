@@ -11,6 +11,22 @@ pub fn xor_block(dest: &mut [u8], src: &[u8], block_size: usize) {
     }
 }
 
+pub fn xor_adjacent_blocks(
+    target_block_index: BlockIndex,
+    adjacent_blocks: &[BlockIndex],
+    augmented_data: &mut [u8],
+    block_size: usize,
+) {
+    for block_index in adjacent_blocks {
+        if *block_index != target_block_index {
+            for i in 0..block_size {
+                augmented_data[target_block_index * block_size + i] ^=
+                    augmented_data[block_index * block_size + i];
+            }
+        }
+    }
+}
+
 // TODO: don't lose bits when combining the stream id and block id
 pub fn seed_block_rng(stream_id: StreamId, check_block_id: CheckBlockId) -> Xoshiro256StarStar {
     // Make sure the seed is a good, even mix of 0's and 1's.

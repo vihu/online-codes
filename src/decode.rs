@@ -1,7 +1,7 @@
 use crate::types::{BlockIndex, CheckBlockId, StreamId};
 use crate::util::{
     get_adjacent_blocks, get_aux_block_adjacencies, make_degree_distribution, num_aux_blocks,
-    xor_block,
+    xor_adjacent_blocks, xor_block,
 };
 use rand::distributions::WeightedIndex;
 use std::collections::{hash_map::Entry, HashMap};
@@ -76,7 +76,7 @@ impl<'a> Decoder {
             adjacent_check_blocks: HashMap::new(),
             decode_stack: Vec::new(),
             aux_decode_stack: Vec::new(),
-            pad: pad,
+            pad,
         }
     }
 
@@ -89,85 +89,8 @@ impl<'a> Decoder {
         self.decode_stack
             .push((check_block_id, check_block.to_owned()));
 
-        while let Some((check_block_id, check_block)) = self.decode_stack.pop() {
-            let adjacent_blocks = get_adjacent_blocks(
-                check_block_id,
-                self.stream_id,
-                &self.degree_distribution,
-                self.num_augmented_blocks,
-            );
-            match undecoded_degree(&adjacent_blocks, &self.blocks_decoded) {
-                UndecodedDegree::Zero => { /* This check block contains no new information. */ }
-                UndecodedDegree::One(target_block_index) => {
-                    decode_from_check_block(
-                        target_block_index,
-                        &check_block,
-                        &adjacent_blocks,
-                        &mut self.augmented_data,
-                        self.block_size,
-                    );
-                    self.blocks_decoded[target_block_index] = true;
-                    if target_block_index < self.num_blocks {
-                        self.num_undecoded_data_blocks -= 1;
-                    } else {
-                        // Decoded an aux block.
-                        // If that aux block can be used to decode a data block, schedule it for
-                        // decoding.
-                        if let Entry::Occupied(mut unused_aux_entry) =
-                            self.unused_aux_block_adjacencies.entry(target_block_index)
-                        {
-                            let remaining_degree = &mut unused_aux_entry.get_mut().0;
-                            *remaining_degree -= 1;
-                            if *remaining_degree == 1 {
-                                self.aux_decode_stack
-                                    .push((target_block_index, unused_aux_entry.remove().1));
-                            }
-                        }
-                    }
-                    if let Some(adjacent_check_block_ids) =
-                        self.adjacent_check_blocks.remove(&target_block_index)
-                    {
-                        for check_block_id in adjacent_check_block_ids {
-                            if let Entry::Occupied(mut unused_block_entry) =
-                                self.unused_check_blocks.entry(check_block_id)
-                            {
-                                let remaining_degree = &mut unused_block_entry.get_mut().0;
-                                *remaining_degree -= 1;
-                                if *remaining_degree == 1 {
-                                    self.decode_stack.push((
-                                        check_block_id,
-                                        unused_block_entry.remove().1.to_owned(),
-                                    ));
-                                }
-                            }
-                        }
-                    };
-                }
-                UndecodedDegree::Many(degree) => {
-                    self.unused_check_blocks
-                        .insert(check_block_id, (degree, check_block.to_owned()));
-                    for block_index in adjacent_blocks {
-                        self.adjacent_check_blocks
-                            .entry(block_index)
-                            .or_default()
-                            .push(check_block_id)
-                    }
-                }
-            }
-        }
-
-        while let Some((aux_block_index, adjacent_blocks)) = self.aux_decode_stack.pop() {
-            if let Some(decoded_block_id) = decode_aux_block(
-                aux_block_index,
-                &adjacent_blocks,
-                &mut self.augmented_data,
-                self.block_size,
-                &self.blocks_decoded,
-            ) {
-                self.blocks_decoded[decoded_block_id] = true;
-                self.num_undecoded_data_blocks -= 1;
-            }
-        }
+        self.process_decode_stack();
+        self.process_aux_decode_stack();
 
         if self.num_undecoded_data_blocks == 0 {
             // Decoding finished -- return decoded data.
@@ -205,63 +128,135 @@ impl<'a> Decoder {
             .truncate(self.num_blocks * self.block_size);
         (self.blocks_decoded, self.augmented_data)
     }
-}
 
-fn decode_from_check_block(
-    target_block_index: BlockIndex,
-    check_block: &[u8],
-    adjacent_blocks: &[BlockIndex],
-    augmented_data: &mut [u8],
-    block_size: usize,
-) {
-    xor_block(
-        &mut augmented_data[target_block_index * block_size..],
-        check_block,
-        block_size,
-    );
-    xor_adjacent_blocks(
-        target_block_index,
-        adjacent_blocks,
-        augmented_data,
-        block_size,
-    );
-}
-
-fn decode_aux_block(
-    index: BlockIndex,
-    adjacent_blocks: &[BlockIndex],
-    augmented_data: &mut [u8],
-    block_size: usize,
-    blocks_decoded: &[bool],
-) -> Option<BlockIndex> {
-    block_to_decode(adjacent_blocks, blocks_decoded).map(|target_block_index| {
-        for i in 0..block_size {
-            augmented_data[target_block_index * block_size + i] ^=
-                augmented_data[index * block_size + i];
+    fn decode_data_block_from_aux_block(&mut self, target_block_index: usize) {
+        if let Entry::Occupied(mut unused_aux_entry) =
+            self.unused_aux_block_adjacencies.entry(target_block_index)
+        {
+            let remaining_degree = &mut unused_aux_entry.get_mut().0;
+            *remaining_degree -= 1;
+            if *remaining_degree == 1 {
+                self.aux_decode_stack
+                    .push((target_block_index, unused_aux_entry.remove().1));
+            }
         }
+    }
+
+    fn handle_degree_many(
+        &mut self,
+        degree: usize,
+        check_block_id: CheckBlockId,
+        check_block: &[u8],
+        adjacent_blocks: Vec<BlockIndex>,
+    ) {
+        self.unused_check_blocks
+            .insert(check_block_id, (degree, check_block.to_owned()));
+        for block_index in adjacent_blocks {
+            self.adjacent_check_blocks
+                .entry(block_index)
+                .or_default()
+                .push(check_block_id)
+        }
+    }
+
+    fn handle_degree_one(
+        &mut self,
+        target_block_index: usize,
+        check_block: &[u8],
+        adjacent_blocks: Vec<BlockIndex>,
+    ) {
+        self.decode_from_check_block(target_block_index, check_block, &adjacent_blocks);
+        self.blocks_decoded[target_block_index] = true;
+        if target_block_index < self.num_blocks {
+            self.num_undecoded_data_blocks -= 1;
+        } else {
+            self.decode_data_block_from_aux_block(target_block_index);
+        }
+        if let Some(adjacent_check_block_ids) =
+            self.adjacent_check_blocks.remove(&target_block_index)
+        {
+            for check_block_id in adjacent_check_block_ids {
+                if let Entry::Occupied(mut unused_block_entry) =
+                    self.unused_check_blocks.entry(check_block_id)
+                {
+                    let remaining_degree = &mut unused_block_entry.get_mut().0;
+                    *remaining_degree -= 1;
+                    if *remaining_degree == 1 {
+                        self.decode_stack
+                            .push((check_block_id, unused_block_entry.remove().1.to_owned()));
+                    }
+                }
+            }
+        };
+    }
+
+    fn process_decode_stack(&mut self) {
+        while let Some((check_block_id, check_block)) = self.decode_stack.pop() {
+            let adjacent_blocks = get_adjacent_blocks(
+                check_block_id,
+                self.stream_id,
+                &self.degree_distribution,
+                self.num_augmented_blocks,
+            );
+            match undecoded_degree(&adjacent_blocks, &self.blocks_decoded) {
+                UndecodedDegree::Zero => (), // nothing to do here
+                UndecodedDegree::One(target_block_index) => {
+                    self.handle_degree_one(target_block_index, &check_block, adjacent_blocks)
+                }
+                UndecodedDegree::Many(degree) => {
+                    self.handle_degree_many(degree, check_block_id, &check_block, adjacent_blocks);
+                }
+            }
+        }
+    }
+
+    fn process_aux_decode_stack(&mut self) {
+        while let Some((aux_block_index, adjacent_blocks)) = self.aux_decode_stack.pop() {
+            if let Some(decoded_block_id) = self.decode_aux_block(aux_block_index, &adjacent_blocks)
+            {
+                self.blocks_decoded[decoded_block_id] = true;
+                self.num_undecoded_data_blocks -= 1;
+            }
+        }
+    }
+
+    fn decode_from_check_block(
+        &mut self,
+        target_block_index: BlockIndex,
+        check_block: &[u8],
+        adjacent_blocks: &[BlockIndex],
+    ) {
+        xor_block(
+            &mut self.augmented_data[target_block_index * self.block_size..],
+            check_block,
+            self.block_size,
+        );
         xor_adjacent_blocks(
             target_block_index,
             adjacent_blocks,
-            augmented_data,
-            block_size,
+            &mut self.augmented_data,
+            self.block_size,
         );
-        target_block_index
-    })
-}
+    }
 
-fn xor_adjacent_blocks(
-    target_block_index: BlockIndex,
-    adjacent_blocks: &[BlockIndex],
-    augmented_data: &mut [u8],
-    block_size: usize,
-) {
-    for block_index in adjacent_blocks {
-        if *block_index != target_block_index {
-            for i in 0..block_size {
-                augmented_data[target_block_index * block_size + i] ^=
-                    augmented_data[block_index * block_size + i];
+    fn decode_aux_block(
+        &mut self,
+        index: BlockIndex,
+        adjacent_blocks: &[BlockIndex],
+    ) -> Option<BlockIndex> {
+        block_to_decode(adjacent_blocks, &self.blocks_decoded).map(|target_block_index| {
+            for i in 0..self.block_size {
+                self.augmented_data[target_block_index * self.block_size + i] ^=
+                    self.augmented_data[index * self.block_size + i];
             }
-        }
+            xor_adjacent_blocks(
+                target_block_index,
+                adjacent_blocks,
+                &mut self.augmented_data,
+                self.block_size,
+            );
+            target_block_index
+        })
     }
 }
 
