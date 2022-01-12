@@ -134,10 +134,12 @@ impl<'a> Decoder {
             self.unused_aux_block_adjacencies.entry(target_block_index)
         {
             let remaining_degree = &mut unused_aux_entry.get_mut().0;
-            *remaining_degree -= 1;
-            if *remaining_degree == 1 {
-                self.aux_decode_stack
-                    .push((target_block_index, unused_aux_entry.remove().1));
+            if *remaining_degree > 0 {
+                *remaining_degree -= 1;
+                if *remaining_degree == 1 {
+                    self.aux_decode_stack
+                        .push((target_block_index, unused_aux_entry.remove().1));
+                }
             }
         }
     }
