@@ -271,7 +271,7 @@ impl<'a> Decoder {
             if !self.blocks_decoded[*block_index] {
                 degree = match degree {
                     UndecodedDegree::Zero => UndecodedDegree::One(*block_index),
-                    UndecodedDegree::One(n) => UndecodedDegree::Many(n),
+                    UndecodedDegree::One(_n) => UndecodedDegree::Many(2),
                     UndecodedDegree::Many(n) => UndecodedDegree::Many(n + 1),
                 }
             }
