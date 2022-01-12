@@ -180,10 +180,12 @@ impl<'a> Decoder {
                     self.unused_check_blocks.entry(check_block_id)
                 {
                     let remaining_degree = &mut unused_block_entry.get_mut().0;
-                    *remaining_degree -= 1;
-                    if *remaining_degree == 1 {
-                        self.decode_stack
-                            .push((check_block_id, unused_block_entry.remove().1.to_owned()));
+                    if *remaining_degree > 0 {
+                        *remaining_degree -= 1;
+                        if *remaining_degree == 1 {
+                            self.decode_stack
+                                .push((check_block_id, unused_block_entry.remove().1.to_owned()));
+                        }
                     }
                 }
             }
