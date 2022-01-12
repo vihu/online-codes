@@ -68,6 +68,30 @@ pub fn new_decoder(buf_len: usize, block_size: usize, stream_id: StreamId) -> De
     Decoder::new((buf_len + pad) / block_size, block_size, stream_id, pad)
 }
 
+pub fn new_decoder_with_params(
+    buf_len: usize,
+    block_size: usize,
+    epsilon: f64,
+    q: usize,
+    stream_id: StreamId,
+) -> Decoder {
+    let len = buf_len;
+    let rem = len % block_size;
+    let pad: usize = match rem {
+        0 => 0,
+        r => block_size - r,
+    };
+    assert!(pad < block_size);
+    Decoder::with_parameters(
+        (buf_len + pad) / block_size,
+        block_size,
+        epsilon,
+        q,
+        stream_id,
+        pad,
+    )
+}
+
 pub fn next_block(encoder: &mut Encoder) -> Option<Block> {
     encoder.block_iter.next()
 }

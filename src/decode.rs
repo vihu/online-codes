@@ -47,15 +47,15 @@ impl DecodeResult {
 
 impl<'a> Decoder {
     pub fn new(num_blocks: usize, block_size: usize, stream_id: StreamId, pad: usize) -> Decoder {
-        Self::with_parameters(num_blocks, block_size, stream_id, 0.01, 3, pad)
+        Self::with_parameters(num_blocks, block_size, 0.01, 3, stream_id, pad)
     }
 
     pub fn with_parameters(
         num_blocks: usize,
         block_size: usize,
-        stream_id: StreamId,
         epsilon: f64,
         q: usize,
+        stream_id: StreamId,
         pad: usize,
     ) -> Decoder {
         let num_aux_blocks = num_aux_blocks(num_blocks, epsilon, q);
