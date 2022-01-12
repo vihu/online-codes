@@ -101,3 +101,24 @@ pub fn make_degree_distribution(epsilon: f64) -> WeightedIndex<f64> {
     }
     WeightedIndex::new(&p).expect("serious probability calculation error")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sample_with_exclusive_repeats_test() {
+        let mut rng = seed_stream_rng(0);
+        let ans = sample_with_exclusive_repeats(&mut rng, 1, 3);
+        println!("ans: {:?}", ans);
+    }
+
+    #[test]
+    fn num_aux_blocks_test() {
+        let q = 3;
+        let epsilon = 0.01;
+        let num_blocks = 10;
+        let num_aux_blocks = (0.55_f64 * q as f64 * epsilon * num_blocks as f64).ceil() as usize;
+        println!("num_aux_blocks: {:?}", num_aux_blocks);
+    }
+}

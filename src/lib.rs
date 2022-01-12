@@ -23,6 +23,26 @@ pub struct Encoder {
 
 pub type Block = (CheckBlockId, Vec<u8>);
 
+pub fn new_encoder_with_params(
+    mut buf: Vec<u8>,
+    block_size: usize,
+    epsilon: f64,
+    q: usize,
+    stream_id: StreamId,
+) -> Encoder {
+    let len = buf.len();
+    let rem = len % block_size;
+    let pad: usize = match rem {
+        0 => 0,
+        r => block_size - r,
+    };
+    assert!(pad < block_size);
+    buf.resize_with(len + pad, || 0);
+    let coder = encode::OnlineCoder::with_parameters(block_size, epsilon, q);
+    let block_iter = coder.encode(buf, stream_id);
+    Encoder { block_iter }
+}
+
 pub fn new_encoder(mut buf: Vec<u8>, block_size: usize, stream_id: StreamId) -> Encoder {
     let len = buf.len();
     let rem = len % block_size;
