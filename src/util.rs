@@ -3,6 +3,7 @@ use rand::distributions::{Distribution, Uniform, WeightedIndex};
 use rand_core::SeedableRng;
 use rand_xoshiro::Xoshiro256StarStar;
 use std::collections::{HashMap, HashSet};
+use std::cmp;
 
 // TODO: optimize
 pub fn xor_block(dest: &mut [u8], src: &[u8], block_size: usize) {
@@ -39,25 +40,43 @@ pub fn get_adjacent_blocks(
     degree_distribution: &WeightedIndex<f64>,
     num_blocks: usize,
 ) -> Vec<BlockIndex> {
+    assert!(num_blocks > 1);
     let mut rng = seed_block_rng(stream_id, check_block_id);
     let degree = 1 + degree_distribution.sample(&mut rng);
-    sample_with_exclusive_repeats(&mut rng, num_blocks, degree)
+    // we don't want the block id itself, because a block is not adjacent to itself
+    sample_with_exclusive_repeats(&mut rng, num_blocks, degree, Some(check_block_id as usize))
 }
 
 pub fn sample_with_exclusive_repeats(
     rng: &mut Xoshiro256StarStar,
     high_exclusive: usize,
     num: usize,
+    exclude: Option<usize>
 ) -> Vec<usize> {
     let mut selected = HashSet::with_capacity(num);
     let distribution = Uniform::new(0, high_exclusive);
-    for _ in 0..num {
+    let mut found = 0;
+    // try to get either num or high_exclusive number of unique samples
+    // whichever is lower
+    // if the 'excluded' value is in this range, lower the bound by 1
+    // if the lowest value is 'high exclusive'
+    let limit = match exclude {
+        Some(s) if s < high_exclusive =>
+            cmp::min(num, high_exclusive - 1),
+        _ =>
+            cmp::min(num, high_exclusive),
+    };
+    while found < limit {
         let sample = distribution.sample(rng);
-        if !selected.insert(sample) {
-            selected.remove(&sample);
+        match exclude {
+            Some(s) if sample == s =>
+                continue,
+            _ =>
+                if selected.insert(sample) {
+                    found += 1;
+                }
         }
     }
-
     selected.into_iter().collect()
 }
 
@@ -78,7 +97,7 @@ pub fn get_aux_block_adjacencies(
     let mut mapping: HashMap<BlockIndex, (usize, Vec<BlockIndex>)> = HashMap::new();
     let mut rng = seed_stream_rng(stream_id);
     for i in 0..num_blocks {
-        for aux_index in sample_with_exclusive_repeats(&mut rng, num_auxiliary_blocks, q) {
+        for aux_index in sample_with_exclusive_repeats(&mut rng, num_auxiliary_blocks, q, None) {
             // TODO: clean up a bit
             let (num, ids) = &mut mapping.entry(aux_index + num_blocks).or_default();
             *num += 1;
@@ -109,7 +128,7 @@ mod tests {
     #[test]
     fn sample_with_exclusive_repeats_test() {
         let mut rng = seed_stream_rng(0);
-        let ans = sample_with_exclusive_repeats(&mut rng, 1, 3);
+        let ans = sample_with_exclusive_repeats(&mut rng, 1, 3, None);
         println!("ans: {:?}", ans);
     }
 

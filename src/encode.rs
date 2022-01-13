@@ -39,7 +39,7 @@ impl OnlineCoder {
         let mut aux_data = vec![0; num_aux_blocks * self.block_size];
         let mut rng = seed_stream_rng(stream_id);
         for block in data.chunks_exact(self.block_size) {
-            for aux_index in sample_with_exclusive_repeats(&mut rng, num_aux_blocks, self.q) {
+            for aux_index in sample_with_exclusive_repeats(&mut rng, num_aux_blocks, self.q, None) {
                 xor_block(
                     &mut aux_data[aux_index * self.block_size..],
                     block,
