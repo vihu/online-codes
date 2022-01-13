@@ -42,7 +42,7 @@ pub fn get_adjacent_blocks(
 ) -> Vec<BlockIndex> {
     assert!(num_blocks > 1);
     let mut rng = seed_block_rng(stream_id, check_block_id);
-    let degree = degree_distribution.sample(&mut rng);
+    let degree = 1 + degree_distribution.sample(&mut rng);
     // it's ok to pick the same "adjacent" block as this is a check block id which
     // are distinct from message/auxilary blocks
     sample_with_exclusive_repeats(&mut rng, num_blocks, degree)
