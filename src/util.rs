@@ -2,8 +2,8 @@ use crate::types::{BlockIndex, CheckBlockId, StreamId};
 use rand::distributions::{Distribution, Uniform, WeightedIndex};
 use rand_core::SeedableRng;
 use rand_xoshiro::Xoshiro256StarStar;
-use std::collections::{HashMap, HashSet};
 use std::cmp;
+use std::collections::{HashMap, HashSet};
 
 // TODO: optimize
 pub fn xor_block(dest: &mut [u8], src: &[u8], block_size: usize) {
@@ -51,7 +51,7 @@ pub fn sample_with_exclusive_repeats(
     rng: &mut Xoshiro256StarStar,
     high_exclusive: usize,
     num: usize,
-    exclude: Option<usize>
+    exclude: Option<usize>,
 ) -> Vec<usize> {
     let mut selected = HashSet::with_capacity(num);
     let distribution = Uniform::new(0, high_exclusive);
@@ -61,20 +61,18 @@ pub fn sample_with_exclusive_repeats(
     // if the 'excluded' value is in this range, lower the bound by 1
     // if the lowest value is 'high exclusive'
     let limit = match exclude {
-        Some(s) if s < high_exclusive =>
-            cmp::min(num, high_exclusive - 1),
-        _ =>
-            cmp::min(num, high_exclusive),
+        Some(s) if s < high_exclusive => cmp::min(num, high_exclusive - 1),
+        _ => cmp::min(num, high_exclusive),
     };
     while found < limit {
         let sample = distribution.sample(rng);
         match exclude {
-            Some(s) if sample == s =>
-                continue,
-            _ =>
+            Some(s) if sample == s => continue,
+            _ => {
                 if selected.insert(sample) {
                     found += 1;
                 }
+            }
         }
     }
     selected.into_iter().collect()
