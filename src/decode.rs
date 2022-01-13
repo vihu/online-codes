@@ -28,6 +28,8 @@ pub struct Decoder {
     pub unused_aux_block_adjacencies: HashMap<BlockIndex, (usize, Vec<BlockIndex>)>,
     pub augmented_data: Vec<u8>,
     pub blocks_decoded: Vec<bool>,
+    pub soft_data: Vec<u8>,
+    pub soft_blocks_decoded: Vec<bool>,
     pub num_undecoded_data_blocks: usize,
     pub unused_check_blocks: HashMap<CheckBlockId, (usize, Vec<u8>)>,
     pub adjacent_check_blocks: HashMap<BlockIndex, Vec<CheckBlockId>>,
@@ -71,6 +73,8 @@ impl<'a> Decoder {
             stream_id,
             augmented_data: vec![0; num_augmented_blocks * block_size],
             blocks_decoded: vec![false; num_augmented_blocks],
+            soft_data: vec![0; num_augmented_blocks * block_size],
+            soft_blocks_decoded: vec![false; num_augmented_blocks],
             num_undecoded_data_blocks: num_blocks,
             unused_check_blocks: HashMap::new(),
             adjacent_check_blocks: HashMap::new(),
@@ -99,6 +103,10 @@ impl<'a> Decoder {
             Some(decoded_data)
         } else {
             // Decoding not yet complete.
+            if self.soft_data != self.augmented_data {
+                println!("difference!")
+            }
+
             None
         }
     }
@@ -241,6 +249,17 @@ impl<'a> Decoder {
             &mut self.augmented_data,
             self.block_size,
         );
+        xor_block(
+            &mut self.soft_data[target_block_index * self.block_size..],
+            check_block,
+            self.block_size,
+        );
+        xor_adjacent_blocks(
+            target_block_index,
+            adjacent_blocks,
+            &mut self.soft_data,
+            self.block_size,
+        );
     }
 
     fn decode_aux_block(
@@ -253,11 +272,19 @@ impl<'a> Decoder {
                 for i in 0..self.block_size {
                     self.augmented_data[target_block_index * self.block_size + i] ^=
                         self.augmented_data[index * self.block_size + i];
+                    self.soft_data[target_block_index * self.block_size + i] ^=
+                        self.soft_data[index * self.block_size + i];
                 }
                 xor_adjacent_blocks(
                     target_block_index,
                     adjacent_blocks,
                     &mut self.augmented_data,
+                    self.block_size,
+                );
+                xor_adjacent_blocks(
+                    target_block_index,
+                    adjacent_blocks,
+                    &mut self.soft_data,
                     self.block_size,
                 );
                 target_block_index
